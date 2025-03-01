@@ -1,1 +1,75 @@
+import logging
+import random
+import csv
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
+# Abilitare il logging per il debug
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Funzione per avviare il bot
+async def start(update: Update, context: CallbackContext) -> None:
+    await update.message.reply_text("Ciao! Sono il tuo bot di design. Usa /brief per ricevere un nuovo brief.")
+
+# Funzione per generare il brief casuale
+async def brief(update: Update, context: CallbackContext) -> None:
+    brief_type = random.choice(['grafica', 'animazione'])  # Genera un tipo casuale
+    if brief_type == 'grafica':
+        brief_message = "Crea una grafica pubblicitaria per un nuovo prodotto. Concentrati sull'impatto visivo!"
+    else:
+        brief_message = "Crea una breve animazione in motion graphics per un brand. Utilizza effetti dinamici."
+
+    await update.message.reply_text(f"Il tuo brief è pronto! Tipo: {brief_type}\n\n{brief_message}")
+
+# Funzione per caricare e valutare il file
+async def receive_file(update: Update, context: CallbackContext) -> None:
+    if update.message.document:
+        # Salva il file caricato
+        file = update.message.document.get_file()
+        file.download(f'./{update.message.document.file_name}')
+
+        # Aggiungi la valutazione e il commento
+        comment = "Il progetto sembra ben realizzato! Ma potresti migliorare il contrasto tra il testo e lo sfondo."
+        await update.message.reply_text(f"File ricevuto! Ecco la tua valutazione:\n\n{comment}")
+        
+        # Salva lo storico nel file CSV
+        save_to_history(update.message.date, 'grafica' if 'grafica' in comment else 'animazione', comment)
+
+# Funzione per salvare lo storico in un CSV
+def save_to_history(date, brief_type, comment):
+    with open('storico_brief.csv', mode='a', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow([date, brief_type, comment])
+
+# Funzione per visualizzare lo storico
+async def storico(update: Update, context: CallbackContext) -> None:
+    try:
+        with open('storico_brief.csv', mode='r', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            history = "\n".join([f"{row[0]} - {row[1]}: {row[2]}" for row in reader])
+            await update.message.reply_text(f"Ecco il tuo storico:\n\n{history}")
+    except FileNotFoundError:
+        await update.message.reply_text("Nessun storico disponibile ancora.")
+
+# Funzione per gestire gli errori
+def error(update: Update, context: CallbackContext) -> None:
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+
+# Funzione principale per configurare il bot
+def main() -> None:
+    # Token del tuo bot
+    application = Application.builder().token("YOUR_TOKEN").build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("brief", brief))
+    application.add_handler(CommandHandler("storico", storico))
+    application.add_handler(MessageHandler(filters.Document.ALL, receive_file))
+
+    application.add_error_handler(error)
+
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
